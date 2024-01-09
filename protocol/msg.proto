@@ -1,0 +1,285 @@
+syntax = "proto3";
+
+package message;
+
+option go_package = "./;protocol";
+
+//基本消息体
+message Message {
+    uint32 Cmd = 1;
+    uint64 Seq = 2;
+    uint32 Version = 3;
+    oneof Body {
+        HeartBeatMessage heartMsg = 4;
+        LoginMessage loginMsg = 5;
+        LogoutMessage logoutMsg = 6;
+        ReceiptMessage receiptMsg = 7;
+        OrderReceiptMessage orderReceiptMsg = 8;
+        RetractMessage retractMsg = 9;
+        RoomMember roomMember = 10;
+        Room room = 11;
+        IMMessage imMsg = 12;
+        PluginMessage pluginMsg = 13;
+        OrderMessage orderMsg = 14;
+        OrderSaveMessage orderSaveMsg = 15;
+        OrderCommand orderCommand = 16;
+        RelayMessage relayMsg = 17;
+        RoomMessage roomMsg = 18;
+        AuthTokenMessage authTokenMsg = 19;
+        AuthStatusMessage authStatusMsg = 20;
+        SystemMessage systemMsg = 21;
+        AppMessage appMsg = 22;
+        ResultMessage resultMsg = 23;
+        AckMessage ackMsg = 24;
+        TransMessage transMsg = 25;
+        StateMessage stateMsg = 26;
+        ModifyMessage modifyMsg = 27;
+        RoomModify roomModifyMsg = 28;
+        PushOrderMessage pushOrderMsg = 29;
+        SyncKeyMessage syncKeyMsg = 30;
+        RegisterMessage registerMsg = 31;
+    };
+}
+
+//心跳包消息
+message HeartBeatMessage {
+}
+
+message RegisterMessage {
+    string Addr = 1;
+}
+
+//回执消息
+message ReceiptMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    repeated RelayInfo Relay = 7;
+    string MergeContent = 8;
+    uint64 MsgId = 9;
+    uint32 MsgStatus = 10;
+    uint64 Timestamp = 11;
+    uint64 ServerTimestamp = 12;
+    uint64 UniqueId = 13;
+}
+
+//信令回执消息
+message OrderReceiptMessage {
+    uint32 Code = 1;
+    string Msg = 2;
+}
+
+//撤回消息
+message RetractMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint64 MsgId = 3;
+}
+
+//房间成员消息
+message RoomMember {
+    string RoomId = 1;
+    string UserId = 2;
+    uint32 PlatformId = 3;
+}
+
+//房间消息
+message Room {
+    string RoomId = 1;
+}
+
+//登录认证
+message LoginMessage {
+    string UserId = 1;
+    uint32 PlatformId = 2;
+}
+
+//登出消息
+message LogoutMessage {
+    string UserId = 1;
+    uint32 PlatformId = 2;
+}
+
+//IM消息
+message IMMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint64 MsgId = 3;
+    uint32 MsgStatus = 4;
+    uint32 Retract = 5;
+    uint64 RelayTimes = 6;
+    uint64 Timestamp = 7;
+    string Content = 8;
+    uint32 Flag = 9;
+    uint64 UniqueId = 10;
+    IMMessage RefMsg = 11;
+    string From = 12;
+    string To = 13;
+    string ThirdMsgId = 14;
+}
+
+//自定义消息
+message PluginMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint32 Type = 3;
+    string Command = 4;
+    uint32 Reply = 5;
+}
+
+//信令消息
+message OrderMessage {
+    string Sender = 1;
+    repeated string Receiver = 2;
+    OrderCommand OrderCommand = 3;
+    uint32 Type = 4;
+}
+
+//信令保存消息
+message OrderSaveMessage {
+    string SenderUserId = 1;
+    repeated string Receiver = 2;
+    OrderCommand OrderCmd = 3;
+    uint32 Reply = 4;
+}
+
+message OrderCommand {
+    uint32 Flag = 1;
+    repeated string CallUser = 2;
+    string Room = 3;
+    string Group = 4;
+    uint32 Reply = 5;
+    string Command = 6;
+}
+
+//转发消息
+message RelayMessage {
+    uint32 Retract = 1;
+    uint32 Type = 2;
+    string Sender = 3;
+    repeated RelayUserInfo MessageByPeer = 4; //原消息发送方 原消息接收方 原消息id
+    repeated RelayGroupInfo MessageByGroup = 5; //原消息发送方 原消息接收方 原消息id
+    repeated string ReceiverPeer = 6; //接收者单人数组
+    repeated string ReceiverGroup = 7; //接收者群数组
+    uint64 Timestamp = 8;
+    uint64 UniqueId = 9;
+}
+
+//房间消息
+message RoomMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint64 Timestamp = 3;
+    string Content = 4;
+}
+
+//Token验证 C->S
+message AuthTokenMessage {
+    string UserId = 1;
+    uint32 PlatformId = 2;
+}
+
+//Token验证状态 S->C
+message AuthStatusMessage {
+    string UserId = 1;
+    uint32 Status = 2;
+}
+
+message AckMessage {
+    uint64 Seq = 1;
+}
+
+message SyncKeyMessage {
+    uint64 SyncKey = 1;
+}
+
+//系统消息
+message SystemMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint64 SystemMsgId = 7;
+    uint64 MsgId = 8;
+    uint64 Timestamp = 9;
+    string Content = 10;
+}
+
+message AppMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint32 PlatformId = 3;
+    string Addr = 4;
+    Message Message = 5;
+}
+
+message ResultMessage {
+    uint32 Code = 1;
+    string Msg = 2;
+}
+
+message TransMessage {
+    uint32 Type = 1;
+    string Sender = 2;
+    string Receiver = 3;
+    uint64 Timestamp = 4;
+    string Content = 5;
+}
+
+message StateMessage {
+    string RoomId = 1;
+    string State = 2;
+}
+
+message ModifyMessage {
+    string Type = 1;
+    string Sender = 2;
+    string Receiver = 3;
+    string Key = 4;
+    string Value = 5;
+}
+
+message ModifyType {
+    string Type = 1;
+    string Key = 2;
+    string Value = 3;
+}
+
+message RoomModify {
+    string RoomId = 3;
+    ModifyType modify = 4;
+}
+
+message PushOrderMessage {
+    string Sender = 1;
+    string Receiver = 2;
+    uint32 Status = 3;
+    uint64 Timestamp = 4;
+    Message message = 5;
+}
+
+//单聊消息转发源消息信息
+message RelayUserInfo {
+    string Sender = 1;
+    string Receiver = 2;
+    uint64 MsgId = 3;
+    string SenderName = 4;
+    string SenderAvatar = 5;
+    string ReceiverName = 6;
+    string ReceiverAvatar = 7;
+}
+
+//群聊消息转发源消息信息
+message RelayGroupInfo {
+    string Sender = 1;
+    string ReceiverGid = 2;
+    uint64 MsgId = 3;
+    string SenderName = 4;
+    string SenderAvatar = 5;
+}
+
+//转发消息回执消息信息
+message RelayInfo {
+    string OldReceiver = 1;
+    uint64 OldMsgId = 2;
+    string NewReceiver = 3;
+    uint64 NewMsgId = 4;
+    uint32 NewReceiverType = 5;
+}
