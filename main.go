@@ -8,10 +8,26 @@ import (
 	"im-client/protocol"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"time"
 )
+
+var MsgChannel chan *protocol.Message
+
+type Client struct{
+	Conn 			*websocket.Conn
+	SendChan 		chan *protocol.Message
+	ReceiveChan 	chan *protocol.Message
+	UserId			string
+	PlatformId 		uint32
+}
+
+type Route struct {
+	clients map[string]interface{}
+}
+var clientRoute Route
 
 func main() {
 	protocolStr := "wss"
@@ -21,24 +37,43 @@ func main() {
 	userId := "d98815d1m1y00deef6fce5e12108018q6xwy35z4"
 	platformId := 201
 
-	url := fmt.Sprintf("%s://%s:%s/%s", protocolStr, host, port, route)
-	StartClient(url, userId, uint32(platformId))
+	MsgChannel = make(chan *protocol.Message, 1024)
 
-	go StartHttpServer("80")
+	go StartHttpServer("81")
+
+	url := fmt.Sprintf("%s://%s:%s/%s", protocolStr, host, port, route)
+
+	client1 := NewClient(userId, uint32(platformId))
+
+
+
+
+
+	client1.StartClient(url)
+	clientRoute.clients[userId] = client1
 }
 
-func StartClient(url string, userId string, platformId uint32){
+func NewClient(userId string, platformId uint32) *Client {
+	client1 := new(Client)
+	client1.UserId = userId
+	client1.PlatformId = platformId
+	client1.SendChan = make(chan *protocol.Message, 1024)
+	client1.ReceiveChan = make(chan *protocol.Message, 1024)
+	return client1
+}
+
+func (client *Client) StartClient(url string){
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
 	log.Printf("连接到 %s", url)
 
 	//1、建立连接
-	client, _, err := websocket.DefaultDialer.Dial(url, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		log.Fatal("连接错误:", err)
 	}
-	defer client.Close()
+	defer conn.Close()
 
 	//2、连接验证
 	authMsg := protocol.Message{
@@ -46,8 +81,8 @@ func StartClient(url string, userId string, platformId uint32){
 		Seq: 0,
 		Body: &protocol.Message_AuthTokenMsg{
 			AuthTokenMsg: &protocol.AuthTokenMessage{
-				UserId: userId,
-				PlatformId: platformId,
+				UserId: client.UserId,
+				PlatformId: client.PlatformId,
 			},
 		},
 	}
@@ -55,20 +90,17 @@ func StartClient(url string, userId string, platformId uint32){
 	if err1 != nil{
 		fmt.Println("Marshal failed!")
 	}
-	err2 := client.WriteMessage(websocket.BinaryMessage, byte1)
+	err2 := conn.WriteMessage(websocket.BinaryMessage, byte1)
 	if err2 != nil{
 		fmt.Println("auth failed!")
 	}
-	//3、发送心跳
-
 
 	done := make(chan struct{})
-
 	//读取消息
 	go func() {
 		defer close(done)
 		for {
-			_, message, err := client.ReadMessage()
+			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("读取错误:", err)
 				return
@@ -91,12 +123,12 @@ func StartClient(url string, userId string, platformId uint32){
 		case <-done:
 			return
 		case _ = <-ticker.C:
+			//定时发送心跳消息
 			hearMsg := protocol.Message{
 				Cmd: protocol.MsgHeartbeat,
 				Seq: 0,
 				Body: &protocol.Message_HeartMsg{
 					HeartMsg: &protocol.HeartBeatMessage{
-
 					},
 				},
 			}
@@ -105,23 +137,30 @@ func StartClient(url string, userId string, platformId uint32){
 				log.Println("marshal failed:", err3)
 			}
 
-			err := client.WriteMessage(websocket.BinaryMessage, byte2)
+			err := conn.WriteMessage(websocket.BinaryMessage, byte2)
 			if err != nil {
 				log.Println("写入错误:", err)
 				return
 			}
+		case msg := <-MsgChannel:
+			//读取通道里面的消息
+			if msg.GetImMsg().Sender != client.UserId{
+				MsgChannel<-msg
+				continue
+			} 
+			byte3, err4 := proto.Marshal(msg)
+			if err4 != nil{
+				log.Println("marshal failed:", err4)
+				continue
+			}
+			err5 := conn.WriteMessage(websocket.BinaryMessage, byte3)
+			if err5 != nil {
+				log.Println("写入错误:", err5)
+				return
+			}
 		case <-interrupt:
 			log.Println("接收到中断信号，关闭连接...")
-			client.Close()
-			//err := client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			//if err != nil {
-			//	log.Println("关闭连接错误:", err)
-			//	return
-			//}
-			//select {
-			//case <-done:
-			//case <-time.After(time.Second):
-			//}
+			conn.Close()
 			return
 		}
 	}
@@ -129,6 +168,8 @@ func StartClient(url string, userId string, platformId uint32){
 
 func StartHttpServer(port string){
 	route := gin.Default()
+
+	route.GET("/debug/pprof/*any", gin.WrapF(http.DefaultServeMux.ServeHTTP))
 
 	route.GET("/healthcheck", func(context *gin.Context) {
 		var response struct {
@@ -142,5 +183,38 @@ func StartHttpServer(port string){
 		context.JSON(http.StatusOK, response)
 	})
 
-	route.Run(":" + port)
+	route.POST("/sendMessage", func(context *gin.Context) {
+		var response struct {
+			State uint        `json:"state"`
+			Data  interface{} `json:"data"`
+			Msg   string      `json:"msg"`
+		}
+		sender := context.PostForm("sender")
+		receiver := context.PostForm("receiver")
+		msg := context.PostForm("message")
+
+		message := &protocol.Message{
+			Cmd: protocol.MsgIm,
+			Seq: 0,
+			Body: &protocol.Message_ImMsg{
+				ImMsg: &protocol.IMMessage{
+					Sender: sender,
+					Receiver: receiver,
+					Content: msg,
+				},
+			},
+		}
+
+		MsgChannel<-message
+
+		response.State = 200
+		response.Data = nil
+		response.Msg = "success"
+		context.JSON(http.StatusOK, response)
+	})
+
+	err := route.Run(":" + port)
+	if err != nil {
+		return 
+	}
 }
